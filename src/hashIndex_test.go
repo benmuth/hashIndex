@@ -7,7 +7,7 @@ import (
 )
 
 func TestAppend(t *testing.T) {
-	m, dataFiles := Init()
+	maps, dataFiles := Init()
 	fmt.Println("test file ", dataFiles)
 	segFileIndex := new(int)
 	pairs := []struct {
@@ -32,7 +32,7 @@ func TestAppend(t *testing.T) {
 		},
 	}
 	for i := 0; i < len(pairs); i++ {
-		Append(pairs[i].key, pairs[i].val, dataFiles, m, segFileIndex)
+		Append(pairs[i].key, pairs[i].val, dataFiles, maps, segFileIndex)
 	}
 	//f := dataFiles[0]
 	fs, err := dataFiles[0].Stat()
