@@ -55,7 +55,7 @@ func Append(k string, v int, segFiles []*os.File, m map[string]int, segFileIndex
 		fmt.Printf("failed to write key value pair to file: %s\n", err)
 		return
 	}
-	fmt.Printf("%v bytes written at %v bytes of segment file %v\n", n, loc, segFileIndex)
+	fmt.Printf("%v bytes written at %v bytes of segment file %v\n", n, loc, *segFileIndex)
 	m[k] = loc + *segFileIndex*fileSize // byte offset value
 }
 
