@@ -15,37 +15,36 @@ const elemSize = 64
 
 // Init prepares a hash index for use, and returns the map and data file to be used
 func Init() ([]map[string]int, []*os.File) {
-	f, err := os.Create("../files/file1.csv")
+	f, err := os.Create("../files/f1")
 	if err != nil {
 		log.Fatalf("couldn't initialize data file: %s\n", err)
 	}
 	dataFiles := []*os.File{f} //TODO: change from slice of files to just opening files by name/number
 	maps := []map[string]int{{}}
-
 	return maps, dataFiles
 }
 
 // Append adds a key-value pair to the end of a segment file
-func Append(k string, v int, segFiles []*os.File, maps []map[string]int, fileIndex *int) {
+func Append(k string, v string, segFiles []*os.File, maps []map[string]int, fileIndex *int) {
 	f := segFiles[*fileIndex]
 	if len(k) > elemSize {
-		fmt.Printf("Failed to add key value pair to hash index: character limit exceeded (lim: %v)\n", elemSize)
+		log.Printf("Failed to add key value pair to hash index: character limit exceeded (lim: %v)\n", elemSize)
 		return
 	}
 	fs, err := f.Stat()
 	if err != nil {
-		fmt.Printf("failed to get location of appended info: %s\n", err)
+		log.Printf("failed to get location of appended info: %s\n", err)
 		return
 	}
 	loc := int(fs.Size())  //loc keeps track of the end of the file
 	if loc > maxFileSize { //create a new segFile and a new map that points to it
 		if f.Close() != nil {
-			fmt.Printf("Failed to close segment file %s: %s", fs.Name(), err)
+			log.Printf("Failed to close segment file %s: %s", fs.Name(), err)
 		}
 		*fileIndex++
-		fNext, err := os.Create(fmt.Sprintf("../files/file%v.csv", len(segFiles)))
+		fNext, err := os.Create(fmt.Sprintf("../files/f1", len(segFiles)))
 		if err != nil {
-			fmt.Printf("Failed to create new segment file: %s", err)
+			log.Printf("Failed to create new segment file: %s", err)
 			return
 		}
 		segFiles = append(segFiles, fNext)
@@ -54,9 +53,9 @@ func Append(k string, v int, segFiles []*os.File, maps []map[string]int, fileInd
 		Append(k, v, segFiles, maps, fileIndex)
 	}
 	maps[*fileIndex][k] = loc // byte offset value
-	n, err := f.WriteString(fmt.Sprintf("%s,%v\n", k, v))
+	n, err := f.WriteString(fmt.Sprintf("%s,%s\n", k, v))
 	if err != nil {
-		fmt.Printf("failed to write key value pair to file: %s\n", err)
+		log.Printf("failed to write key value pair to file: %s\n", err)
 		return
 	}
 	fmt.Printf("%v bytes written at %v bytes of segment file %v\n", n, loc, *fileIndex)
@@ -65,18 +64,24 @@ func Append(k string, v int, segFiles []*os.File, maps []map[string]int, fileInd
 // LookUp returns the associated value of a given key
 func LookUp(k string, segFiles []*os.File, maps []map[string]int) string {
 	var loc, index int
-	for i := 0; i < len(maps); i++ {
-		if v, ok := maps[i][k]; ok {
+	for i, m := range maps {
+		if v, ok := m[k]; ok {
 			loc = v
 			index = i
+			log.Printf("found value for key %s at location %v in file/map %v", k, loc, index)
+			break
+		} else {
+			fmt.Printf("key %s not found in map", k)
+			return ""
 		}
 	}
 	f := segFiles[index]
-	line := make([]byte, elemSize)
-
+	//6apple3red
+	line := make([]byte)
 	n, err := f.ReadAt(line, int64(loc))
 	if err != nil {
-		fmt.Printf("Failed to lookup value in segment file: %s\n", err)
+		log.Printf("Failed to lookup value for key %s in segment file at location %v: %s\n", k, loc, err)
+		return ""
 	}
 	fmt.Printf("Read %v bytes from segment file\n", n)
 	return cleanLine(line)
