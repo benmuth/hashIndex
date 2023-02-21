@@ -1,6 +1,7 @@
 package hashIndex
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
@@ -32,8 +33,6 @@ func Init() *HashIndex {
 }
 
 // current data format:
-// key,value\n
-// TODO: come up with binary encoding for data
 // lenByte|{length}|value(len=lenByte|length)
 // if lenByte > 255 (max value of 1 byte), then look at length to determine how long the value is
 // length would have to be greater than one byte, so you need a lenByte for length
@@ -55,9 +54,9 @@ func Write(key string, val string, f *os.File, m map[string]int) error {
 	}
 	loc := fs.Size()
 
-	data := []byte(key + "," + val + "\n")
+	data := encode(val)
 
-	// append key and value to file at byte offset n
+	// append value to file at byte offset loc
 	n, err := f.WriteAt(data, loc)
 	if err != nil {
 		return err
@@ -68,10 +67,23 @@ func Write(key string, val string, f *os.File, m map[string]int) error {
 	return nil
 }
 
-// A value string will be encoded with a length prefix byte, like this:
-// 		"hello" -> []byte(5, 'h', 'e', 'l', 'l', 'o')
+func Read(key string, f *os.File, m map[string]int) (string, error) {
+	// look up key in map
+	offset, ok := m[key]
+	if !ok {
+		return "", fmt.Errorf("Failed to read key from file: key is not in map\n")
+	}
+	s, err := decode(offset, f)
+	if err != nil {
+		return "", err
+	}
+	return s, nil
+}
+
+// A value string is encoded with a length prefix byte, like this:
+// 		"hello" -> []byte{5, 'h', 'e', 'l', 'l', 'o'}
 // If the value string is longer than 255 bytes, multiple bytes are needed to encode the string, like this:
-// 		aLongStriii..ing 	->		[]byte(255, 2, 1, 13, 'a', 'L', 'o'...)
+// 		"aLongStriii...ing" 	 ->	[]byte{255, 2, 1, 13, 'a', 'L', 'o'...}
 // 					^255 'i's (len=269)    ^    ^  ^--^- string length bytes (1 * 2^8 + 13)
 //										   |	bytes needed to encode string length (2 bytes for 269 chars)
 //										   255 indicates long string
@@ -143,19 +155,6 @@ func decode(offset int, source io.ReaderAt) (string, error) {
 		return string(s), nil
 	}
 }
-
-// func Read(key string, f *os.File, m map[string]int) (string, error) {
-// 	// look up key in map
-// 	offset, ok := m[key]
-// 	if !ok {
-// 		return "", fmt.Errorf("Failed to read key from file: key is not in map\n")
-// 	}
-// 	// seek to byte offset in file
-// 	f.Seek(int64(offset), 0)
-// 	// return value read at byte offset
-// 	reader := bufio.NewReader(f)
-// 	reader.Read
-// }
 
 // Append adds a key-value pair to the end of a segment file
 // func Append(k string, v string, segFiles []*os.File, maps []map[string]int, fileIndex *int) {
