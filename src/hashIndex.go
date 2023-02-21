@@ -68,18 +68,27 @@ func Write(key string, val string, f *os.File, m map[string]int) error {
 	return nil
 }
 
+// A value string will be encoded with a length prefix byte, like this:
+// 		"hello" -> []byte(5, 'h', 'e', 'l', 'l', 'o')
+// If the value string is longer than 255 bytes, multiple bytes are needed to encode the string, like this:
+// 		aLongStriii..ing 	->		[]byte(255, 2, 1, 13, 'a', 'L', 'o'...)
+// 					^255 'i's (len=269)    ^    ^  ^--^- string length bytes (1 * 2^8 + 13)
+//										   |	bytes needed to encode string length (2 bytes for 269 chars)
+//										   255 indicates long string
+
+// encode encodes the value string into a length-prefixed slice of bytes.
 func encode(val string) []byte {
 	l := len(val) // maybe should be converted to bytes before length is measured?
 	buf := make([]byte, 1)
-	if l <= 255 {
+	if l <= 255 { // the length of the value string can be encoded in 1 byte
 		buf[0] = byte(l)
 		for i := 1; i < len(buf); i++ {
 			buf[i] = byte(val[i])
 		}
 		buf = append(buf, []byte(val)...)
-	} else {
+	} else { // the length of the value string needs multiple bytes to be encoded
 		buf[0] = 255
-		// finds the number of bytes needed to encode the length of the value string
+		// find the number of bytes needed to encode the length of the value string
 		n := 0
 		for x := l; x != 0; {
 			x >>= 8
@@ -93,59 +102,44 @@ func encode(val string) []byte {
 			l >>= 8
 		}
 		buf = append(buf, b...)
-		buf = append(buf, []byte(val)...)
+		buf = append(buf, val...)
 	}
 	return buf
 }
 
+// decode decodes a slice of bytes from a source at a given offset, and returns the string.
 func decode(offset int, source io.ReaderAt) (string, error) {
+	// find length of value string
 	firstByte := make([]byte, 1)
-	n, err := source.ReadAt(firstByte, int64(offset))
-	if err != nil {
+	if _, err := source.ReadAt(firstByte, int64(offset)); err != nil {
 		return "", err
 	}
-	fmt.Println(n, "bytes read")
-	// fmt.Println(source)
 	length := firstByte[0]
 	if length < 255 {
-		offset++
 		s := make([]byte, length)
-		n, err = source.ReadAt(s, int64(offset))
-		if err != nil {
+		if _, err := source.ReadAt(s, int64(offset+1)); err != nil {
 			return "", err
 		}
-		fmt.Println(n, "bytes read")
-		// fmt.Println("data", s)
 		return string(s), nil
 	} else {
 		secondByte := make([]byte, 1)
-		offset++
-		_, err = source.ReadAt(secondByte, int64(offset))
-		if err != nil {
+		if _, err := source.ReadAt(secondByte, int64(offset+1)); err != nil {
 			return "", err
 		}
 		numLengthBytes := secondByte[0]
-		fmt.Println("numLengthBytes", numLengthBytes)
 		valLength := make([]byte, numLengthBytes)
-		offset++
-		_, err = source.ReadAt(valLength, int64(offset))
-		if err != nil {
+		if _, err := source.ReadAt(valLength, int64(offset+2)); err != nil {
 			return "", err
 		}
-		fmt.Println(valLength)
 		l := 0
 		for i := 0; i < int(numLengthBytes); i++ {
 			l <<= 8
 			l += int(valLength[i])
-			fmt.Println("l:", l)
 		}
 		s := make([]byte, l)
-		offset += int(numLengthBytes)
-		_, err = source.ReadAt(s, int64(offset))
-		if err != nil {
+		if _, err := source.ReadAt(s, int64(offset+2)+int64(numLengthBytes)); err != nil {
 			return "", err
 		}
-		// fmt.Println("data", s)
 		return string(s), nil
 	}
 }
